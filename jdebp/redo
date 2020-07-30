@@ -1,0 +1,94 @@
+#!/bin/bash
+#
+# Alan Grosskurth
+# http://grosskurth.ca/xredo/20070117/redo
+# Public domain
+#
+# Several modifications 2012-11-02 Jonathan de Boyne Pollard
+#
+set -x
+
+[ -d .redo ] || mkdir .redo
+
+msg_() {
+	level_="$1: "
+	shift
+	case "$level_" in
+		info*) level_=
+	esac
+	echo "redo: ${level_}$@" 1>&2
+}
+
+record_() {
+	echo "$1" > .redo/"$2"'{new}'
+	mv -- .redo/"$2"'{new}' .redo/"$2"
+}
+
+result=0
+#msg_ info "PROCESSING: $@"
+for i in "$@"
+do
+	# Handle source files.
+	# If it doesn't exist or if any of the .redo database entry exists (even half-built stuff), it must be a target.
+	if [ -e "$i" -a \! -e .redo/"$i.uptodate" -a \! -e .redo/"$i.prereqs" -a \! -e .redo/"$i.prereqsne" -a \! -e .redo/"$i.prereqs.build" -a \! -e .redo/"$i.prereqsne.build" ]
+	then
+#		msg_ info "source file $i"
+		continue
+	fi
+
+	rm -f -- .redo/"$i.prereqs.build"
+	rm -f -- .redo/"$i.prereqsne.build"
+
+	# Determine which build script to execute (rebuild it if necessary)
+	if [ -e "$i.do" ]
+	then
+		REDOPARENT="$i" redo-ifchange "$i.do"
+		buildfile="$i.do"
+	else
+		default="$(echo "$i" | sed 's/.*\(\.[^\.]*\)$/default\1/')"
+		if [ -e "$default.do" ] 
+		then
+			REDOPARENT="$i" redo-ifchange "$default.do"
+			REDOPARENT="$i" redo-ifcreate "$i.do"
+			buildfile="$default.do"
+		else
+			msg_ error "$i: no build script ($default.do) found"
+			result=111
+			continue
+		fi
+	fi
+	basefile="$(echo "$i" | sed 's/\..*$//')"
+
+	# Mark target as not up to date.
+	rm -f -- .redo/"$i.uptodate"
+
+	# Execute the build script
+	rm -f -- "$i---redoing"
+#	msg_ info EXECUTING: "./$buildfile" "$i" "$basefile" "$i---redoing" > "$i---redoing" 
+	REDOPARENT="$i" "./$buildfile" "$i" "$basefile" "$i---redoing" > "$i---redoing" 
+	r="$?"
+	if [ "$r" -eq 0 ]
+	then
+		mv -- "$i---redoing" "$i"
+		msg_ info "rebuilt $i"
+		if [ -e .redo/"$i.prereqs.build" ] 
+		then
+			mv -- .redo/"$i.prereqs.build" .redo/"$i.prereqs"
+		else
+			rm -f -- .redo/"$i.prereqs"
+		fi
+		if [ -e .redo/"$i.prereqsne.build" ] 
+		then
+			mv -- .redo/"$i.prereqsne.build" .redo/"$i.prereqsne"
+		else
+			rm -f -- .redo/"$i.prereqsne"
+		fi
+		record_ "y" "$i.uptodate"
+	else
+		rm -f -- "$i---redoing"
+		msg_ error "failed to rebuild $i"
+		result=111
+	fi
+done
+#msg_ info "RESULT: ($@) $result"
+exit $result

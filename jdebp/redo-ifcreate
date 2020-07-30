@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+# Alan Grosskurth
+# http://grosskurth.ca/xredo/20070117/redo-ifcreate
+# Public domain
+#
+# Several modifications 2012-11-02 Jonathan de Boyne Pollard
+#
+set -x
+
+msg_ () {
+	level_="$1:"
+	shift
+	case "$level_" in
+		info*) level_=
+	esac
+	echo "redo-ifcreate: ${level_} $@" 1>&2
+	case "$level_" in
+		error*) exit 111 ;;
+	esac
+}
+
+if [ -z "$REDOPARENT" ] 
+then
+	msg_ error "$i: no parent"
+	exit 111
+fi
+
+for i in "$@"
+do
+	[ -d .redo/"$(dirname $i)" ] || mkdir -p .redo/"$(dirname $i)"
+	[ -e "$i" ] && msg_ error "$i exists"
+
+	( 
+		fgrep -v -- "$i" .redo/"$REDOPARENT.prereqsne.build" 2>/dev/null
+		echo "$i"
+	) > .redo/"$REDOPARENT.prereqsne.build"'{new}'
+	mv -- .redo/"$REDOPARENT.prereqsne.build"'{new}' .redo/"$REDOPARENT.prereqsne.build"
+done

@@ -1,0 +1,119 @@
+#!/bin/bash
+#
+# Alan Grosskurth
+# http://grosskurth.ca/xredo/20070117/redo-ifchange
+# Public domain
+#
+# Several modifications 2012-11-02 Jonathan de Boyne Pollard
+#
+set -x
+
+msg_() {
+	level_="$1: "
+	shift
+	case "$level_" in
+		info*) level_=
+	esac
+	echo "redo-ifchange: ${level_}$@" 1>&2
+	case "$level_" in
+		error*) exit 111 ;;
+	esac
+}
+
+record_prereq_() {
+	( 
+		printf "%q %s %s\n" "$1" "$2" "$3"
+		fgrep -v -- "$1" .redo/"$REDOPARENT.prereqs.build" 2>/dev/null
+	) > .redo/"$REDOPARENT.prereqs.build"'{new}'
+	mv .redo/"$REDOPARENT.prereqs.build"'{new}' .redo/"$REDOPARENT.prereqs.build"
+}
+
+changed_ () {
+	local result=1
+	local i
+	local file
+	local sum
+
+	[ \! -e "$1" ] && result=0
+
+	# Check regular prerequisites
+	local outdated=""
+	if [ -e .redo/"$1.prereqs" ]
+	then
+		while read file time sum
+		do
+			if changed_ $file
+			then
+#				msg_ info "$1: $file has changed"
+				printf -v outdated "%s %q" "$outdated" "$file"
+			fi
+		done < .redo/"$1.prereqs"
+		if [ -n "$outdated" ]
+		then
+			redo $outdated || result=0
+		fi
+		while read file time sum
+		do
+			if [ \! -f "$file" ]
+			then
+				result=0
+				break
+			elif [ \! "$(stat --printf "%Y" -- "$file")" = "$time" ] && [ \! "$(md5sum -- "$file" | awk '{print $1;}')" = "$sum" ]
+			then
+				result=0
+				break
+			fi
+		done < .redo/"$1.prereqs"
+	fi
+
+	# Check nonexistent prerequisites
+	if [ -e .redo/"$1.prereqsne" ]
+	then
+		while read -r line
+		do
+			if [ -e "$line" ] 
+			then
+				result=0
+				break
+			fi
+		done < .redo/"$1.prereqsne"
+	fi
+
+	return $result
+}
+
+if [ -z "$REDOPARENT" ] 
+then
+	msg_ error "$i: no parent"
+	exit 111
+fi
+
+result=0
+#msg_ info "PROCESSING: $@"
+for i in "$@"
+do
+	[ -d .redo/"$(dirname $i)" ] || mkdir -p .redo/"$(dirname $i)"
+
+	if changed_ "$i" 
+	then
+		if redo "$i"
+		then
+			if [ -f "$i" ]
+			then
+				record_prereq_ "$i" "$(stat --printf "%Y" -- "$i")" "$(md5sum -- "$i" | awk '{print $1;}')"
+			else
+				record_prereq_ "$i" "nowhen" "non-file"
+			fi
+		else
+			record_prereq_ "$i" "nowhen" "failed"
+			result=111
+		fi
+	elif [ -f "$i" ]
+	then
+		record_prereq_ "$i" "$(stat --printf "%Y" -- "$i")" "$(md5sum -- "$i" | awk '{print $1;}')"
+	else
+		record_prereq_ "$i" "nowhen" "non-file"
+	fi
+done
+#msg_ info "RESULT: ($@) $result"
+exit $result
