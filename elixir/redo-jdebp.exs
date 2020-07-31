@@ -22,18 +22,15 @@ defmodule Redo do
     Path.wildcard(".redo/#{file}.{prereqs,prereqsne}.build")
     |> Enum.each(&File.rm/1)
 
-    if File.exists?(".redo/#{file}.do") do
-      # redo_ifchange("#{file}.do", file)
-      # buildfile = "#{file}.do"
+    if File.exists?("#{file}.do") do
+      redo_ifchange("#{file}.do", file)
     else
       default = Regex.replace(~r/.*([.][^.]*)$/, file, "default\\1.do")
-      |> IO.inspect()
-      if File.exists?(".redo/#{default}.do") do
-        # buildfile = "#{default}.do"
-        # redo_ifchange("#{default}.do", file)
-        # redo_ifcreate("#{file}.do", file)
+      if File.exists?("#{default}.do") do
+        redo_ifchange("#{default}.do", file)
+        redo_ifcreate("#{file}.do", file)
       else
-        {:error, "#{file}: no build script (#{default}.do) found"}
+        exit "cannot build #{file}: no build script (#{default}.do) found"
       end
     end
 	  # basefile = Regex.replace(~r/\..*$/, file, "")
@@ -44,7 +41,14 @@ defmodule Redo do
     |> File.write("redoing")
 
     # if r=0 do
+  end
 
+  def redo_ifchange(buildfile, file) do
+    IO.inspect("ifchange: #{buildfile}, #{file}")
+  end
+
+  def redo_ifcreate(buildfile, file) do
+    IO.inspect("ifcreate: #{buildfile}, #{file}")
   end
 end
 
