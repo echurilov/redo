@@ -8,6 +8,7 @@ defmodule Redo do
     case result do
       :ok -> IO.puts("yay")
       {:error, msg} -> IO.puts("error: #{msg}")
+      _ -> "wat: #{result}"
     end
   end
 
@@ -25,16 +26,14 @@ defmodule Redo do
     direct = "#{file}.do"
     default = Regex.replace(~r/.*([.][^.]*)$/, file, "default\\1") <> ".do"
 	  basefile = Regex.replace(~r/\..*$/, file, "")
-
-    IO.inspect(default)
     buildfile = 
       cond do
         File.exists?(direct) -> 
-          redo_ifchange(direct, file)
+          # redo_ifchange(direct, file)
           direct
         File.exists?(default) ->
-          redo_ifchange(default, file)
-          redo_ifcreate(direct, file)
+          # redo_ifchange(default, file)
+          # redo_ifcreate(direct, file)
           default
         true ->
           exit "cannot build #{file}: no build script (#{default}) found"
@@ -43,11 +42,14 @@ defmodule Redo do
     Path.wildcard(".redo/#{file}{.uptodate,---redoing}")
     |> Enum.each(&File.rm/1)
 
-    "./#{buildfile}"
-    |> Path.expand()
-    |> System.cmd([file, basefile, "#{file}---redoing"])
+    {_, result} = "sh"
+    |> System.cmd(["./#{buildfile}", file, basefile, "#{file}---redoing"],
+      into: File.stream!("#{file}---redoing"))
+    |> IO.inspect()
 
-    # if r=0 do
+    if result == 0 do
+      IO.puts("made it here")
+    end
   end
 
   def redo_ifchange(buildfile, redoparent) do
