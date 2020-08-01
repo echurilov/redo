@@ -23,8 +23,10 @@ defmodule Redo do
     |> Enum.each(&File.rm/1)
 
     direct = "#{file}.do"
-    default = Regex.replace(~r/.*([.][^.]*)$/, file, "default\\1.do")
+    default = Regex.replace(~r/.*([.][^.]*)$/, file, "default\\1") <> ".do"
 	  basefile = Regex.replace(~r/\..*$/, file, "")
+
+    IO.inspect(default)
     buildfile = 
       cond do
         File.exists?(direct) -> 
@@ -38,11 +40,12 @@ defmodule Redo do
           exit "cannot build #{file}: no build script (#{default}) found"
       end
 
-    Path.wildcard(".redo/#{file}.{uptodate,redoing}")
+    Path.wildcard(".redo/#{file}{.uptodate,---redoing}")
     |> Enum.each(&File.rm/1)
 
-    "#{file}.redoing"
-    |> File.write("./#{buildfile} #{file} #{basefile} #{file}.redoing")
+    "./#{buildfile}"
+    |> Path.expand()
+    |> System.cmd([file, basefile, "#{file}---redoing"])
 
     # if r=0 do
   end
