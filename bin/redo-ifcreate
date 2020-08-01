@@ -1,0 +1,3 @@
+#!/bin/sh
+set -ex
+elixir -r ../elixir/redo.exs -e Redo.redo_ifcreate $@
