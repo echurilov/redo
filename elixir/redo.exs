@@ -44,14 +44,12 @@ defmodule Redo do
     |> Path.wildcard()
     |> Enum.each(&File.rm/1)
 
-    placeholder = "#{file}---redoing"
-
     {_, result} = "sh"
-    |> System.cmd(["./#{buildfile}", file, basefile, placeholder],
-      into: File.stream!(placeholder))
+    |> System.cmd(["./#{buildfile}", file, basefile, "#{file}---redoing"],
+      into: File.stream!("#{file}---redoing"))
 
     if result == 0 do
-      File.rename(placeholder, file)
+      File.rename("#{file}---redoing", file)
       IO.puts("rebuilt #{file}")
       if File.exists?(".redo/#{file}.prereqs.build") do
         File.rename(".redo/#{file}.prereqs.build", ".redo/#{file}.prereqs")
@@ -65,7 +63,7 @@ defmodule Redo do
       end
     File.touch!(".redo/#{file}.uptodate")
     else
-      File.rm(placeholder)
+      File.rm("#{file}---redoing")
        exit "failed to rebuild #{file}"
     end
   end
@@ -76,7 +74,6 @@ defmodule Redo do
 
     System.argv()
     |> Enum.each(&redo_ifchange(&1, System.get_env("REDOPARENT")))
-
   end
 
   def redo_ifchange(buildfile, redoparent) do    
@@ -93,21 +90,32 @@ defmodule Redo do
   end
 
   def record_prereq(file, redoparent, :stats) do
+    md5 = :crypto.hash(:md5, file) |> Base.encode16 |> String.downcase
+    parent_file = ".redo/#{redoparent}.prereqs.build"
     stats = case File.stat(file, time: :posix) do
-      {:ok, %File.Stat{type: :regular, mtime: mtime}} -> IO.puts("'#{file}' #{mtime} #{md5sum(file)}")
-      {:ok, %File.Stat{type: _, mtime: mtime}} -> IO.puts("'#{file}' #{mtime} non-file")
-      {:error, _} -> IO.puts("'#{file}' nowhen non-file") 
+      {:ok, %File.Stat{type: :regular, mtime: mtime}} -> %{file: file, mtime: mtime, md5: md5}
+      {:ok, %File.Stat{type: _, mtime: mtime}} -> %{file: file, mtime: mtime, md5: "non-file"}
+      {:error, _} -> %{file: file, mtime: "nowhen", md5: "non-file"}
     end
+    |> IO.inspect()
 
-    placeholder = ".redo/#{redoparent}.prereqs.build{new}"
-
-    File.write(placeholder, stats)
-
-    File.rename(placeholder, ".redo/#{redoparent}.prereqs.build")
+    File.write("#{parent_file}---new", stats)
+    File.rename("#{parent_file}---new", parent_file)
+    |> IO.inspect()
   end
 
   def record_prereq(file, redoparent, :failed) do
-    IO.puts("'#{file}' nowhen failed") 
+    parent_file = ".redo/#{redoparent}.prereqs.build"
+    stats = %{file: file, mtime: "nowhen", md5: "failed"}
+
+    File.write("#{parent_file}---new", stats)
+    File.rename("#{parent_file}---new", parent_file)
+
+    exit "failed"
+  end
+
+  def changed(file) do
+    file == file
   end
 
   def redo_ifcreate() do
@@ -117,13 +125,5 @@ defmodule Redo do
 
   def redo_ifcreate(buildfile, redoparent) do
     IO.inspect("ifcreate: #{buildfile}, #{redoparent}")
-  end
-
-  def md5sum(file) do
-    "has #{file}"
-  end
-
-  def changed(file) do
-    file == file
   end
 end
