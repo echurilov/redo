@@ -22,7 +22,7 @@ defmodule Redo do
 
   def build(file) do
     IO.puts("building #{file}")
-    
+
     ".redo/#{file}.{prereqs.build,prereqsne.build,uptodate}"
     |> Path.wildcard()
     |> Enum.each(&File.rm/1)
@@ -33,8 +33,8 @@ defmodule Redo do
         file,
         Regex.replace(~r/\..*$/, file, ""),
         "#{file}---redoing"
-      ], into: File.stream!("#{file}---redoing",
-      env: [{"REDOPARENT", file})
+      ], into: File.stream!("#{file}---redoing"),
+      env: [{"REDOPARENT", file}]
     )
 
     if code == 0 do
