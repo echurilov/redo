@@ -21,22 +21,22 @@ defmodule Redo do
   end
 
   def build(file) do
-    ".redo/#{file}.{prereqs.build,prereqsne.build,uptodate,---redoing}"
+    ".redo/#{file}.{prereqs.build,prereqsne.build,uptodate}"
     |> Path.wildcard()
     |> Enum.each(&File.rm/1)
 
-    {_, result} = System.cmd(
+    {_, code} = System.cmd(
       "sh", [
         "./#{buildfile(file)}",
         file,
         Regex.replace(~r/\..*$/, file, ""),
         "#{file}---redoing"
-      ], into: File.stream!("#{file}---redoing")
+      ], into: File.stream!("#{file}---redoing",
+      env: [{"REDOPARENT", file})
     )
 
-    System.put_env("REDOPARENT", file)
-
-    if result == 0 do
+    if code == 0 do
+      IO.puts("building #{file}")
       File.rename("#{file}---redoing", file)
       IO.puts("rebuilt #{file}")
       update(".redo/#{file}.prereqs")
@@ -44,7 +44,7 @@ defmodule Redo do
       File.touch!(".redo/#{file}.uptodate")
     else
       File.rm("#{file}---redoing")
-       exit "failed to rebuild #{file}"
+      exit "failed to rebuild #{file} (#{code})"
     end
   end
 
@@ -81,8 +81,10 @@ defmodule Redo do
   end
 
   def redo_ifchange(buildfile, redoparent) do
+    bif = build_if_target(buildfile) |> IO.inspect()
+
     if changed(buildfile) do
-      if build_if_target(buildfile) do
+      if bif do
         record_prereq(buildfile, redoparent, :stats)
       else
         record_prereq(buildfile, redoparent, :failed)
@@ -117,7 +119,11 @@ defmodule Redo do
   end
 
   def changed(file) do
-    file == file
+    case file do
+      "it.do" -> false
+      "default.part.do" -> false
+      _ -> true
+    end
   end
 
   def redo_ifcreate() do
