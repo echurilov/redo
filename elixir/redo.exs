@@ -21,6 +21,8 @@ defmodule Redo do
   end
 
   def build(file) do
+    IO.puts("building #{file}")
+    
     ".redo/#{file}.{prereqs.build,prereqsne.build,uptodate}"
     |> Path.wildcard()
     |> Enum.each(&File.rm/1)
@@ -36,7 +38,6 @@ defmodule Redo do
     )
 
     if code == 0 do
-      IO.puts("building #{file}")
       File.rename("#{file}---redoing", file)
       IO.puts("rebuilt #{file}")
       update(".redo/#{file}.prereqs")
