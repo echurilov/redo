@@ -86,10 +86,9 @@ defmodule Redo do
   end
 
   def record_prereq(:ok, file, redoparent) do 
-    md5 = :crypto.hash(:md5, file) |> Base.encode16 |> String.downcase
     parent_file = ".redo/#{redoparent}.prereqs.build"
     stats = case File.stat(file, time: :posix) do
-      {:ok, %File.Stat{type: :regular, mtime: mtime}} -> "#{file} #{mtime} #{md5}"
+      {:ok, %File.Stat{type: :regular, mtime: mtime}} -> "#{file} #{mtime} #{md5(file)}"
       {:ok, %File.Stat{type: _, mtime: mtime}} -> "#{file} #{mtime} non-file"
       {:error, _} -> "#{file} nowhen non-file"
     end
@@ -109,19 +108,25 @@ defmodule Redo do
   end
 
   def changed(redoparent) do
-    {:ok, contents} = File.read(".redo/#{redoparent}.prereqs")
-    {file, mtime, md5} = String.split(contents)
+    stats = %{file: nil, mtime: nil, md5: nil}
+    if File.exists?(".redo/#{redoparent}.prereqs") do
+      {:ok, contents} = File.read(".redo/#{redoparent}.prereqs")
+      [file, mtime, md5] = String.split(contents)
+      %{stats | file: file, mtime: mtime, md5: md5}
+    end
 
-    # if changed(file) do
-    #   IO.puts("#{redoparent}: #{file} has changed")
-    # File.write(".redo/#{redoparent}.prereqs", "outdated #{file}")
-    # end
+    if stats.file != nil do
+      if changed(stats.file) do
+        IO.puts("#{redoparent}: #{stats.file} has changed")
+        build_if_target(stats.file)
+      end
+    end
 
-    # case file do
-    #   "it" -> false
-    #   "a.part" -> false
-    #   "b.part" -> false
-    #   _ -> true
+    # cond do
+    #   stats.file == nil -> true
+    #   File.stat(stats.file, time: :posix).mtime == stats.mtime and stats.md5 == md5(redoparent) -> true
+    #   File.exists?(".redo/#{redoparent}.prereqsne") -> true
+    #   true -> false
     # end
   end
 
@@ -132,5 +137,9 @@ defmodule Redo do
 
   def redo_ifcreate(buildfile, redoparent) do
     IO.inspect("redo_ifcreate(#{buildfile}, #{redoparent})")
+  end
+
+  def md5(string) do
+    :crypto.hash(:md5, string) |> Base.encode16 |> String.downcase
   end
 end
