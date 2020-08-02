@@ -44,8 +44,7 @@ defmodule Redo do
       update(".redo/#{file}.prereqsne")
       File.touch!(".redo/#{file}.uptodate")
     else
-      File.rm("#{file}---redoing")
-      exit "failed to rebuild #{file} (#{code})"
+      File.rm("#{file}---redoing")   
     end
   end
 
@@ -82,21 +81,11 @@ defmodule Redo do
   end
 
   def redo_ifchange(buildfile, redoparent) do
-    bif = build_if_target(buildfile) |> IO.inspect()
-
-    if changed(buildfile) do
-      if bif do
-        record_prereq(buildfile, redoparent, :stats)
-      else
-        record_prereq(buildfile, redoparent, :failed)
-        exit "cannot build #{buildfile} with parent #{redoparent}"
-      end
-    else 
-      record_prereq(buildfile, redoparent, :stats)
-    end
+    status = if changed(buildfile), do: build_if_target(buildfile), else: :ok
+    record_prereq(status, buildfile, redoparent)
   end
 
-  def record_prereq(file, redoparent, :stats) do 
+  def record_prereq(:ok, file, redoparent) do 
     md5 = :crypto.hash(:md5, file) |> Base.encode16 |> String.downcase
     parent_file = ".redo/#{redoparent}.prereqs.build"
     stats = case File.stat(file, time: :posix) do
@@ -109,14 +98,14 @@ defmodule Redo do
     File.rename("#{parent_file}---new", parent_file)
   end
 
-  def record_prereq(file, redoparent, :failed) do
+  def record_prereq(nil, file, redoparent) do
     parent_file = ".redo/#{redoparent}.prereqs.build"
     stats = %{file: file, mtime: "nowhen", md5: "failed"}
 
     File.write("#{parent_file}---new", stats)
     File.rename("#{parent_file}---new", parent_file)
 
-    IO.puts("failed to rebuild #{file}")
+    exit "cannot build #{file} with parent #{redoparent}"
   end
 
   def changed(file) do
