@@ -1,22 +1,18 @@
 defmodule Redo do
   def redo() do 
-    IO.inspect("redo()")
-
     unless File.exists?(".redo"), do: File.mkdir(".redo")
     
-   result = System.argv()
+    result = System.argv()
     |> Enum.each(&build_if_target/1)
 
     case result do
-      :ok -> IO.inspect("rebuilt all")
-      {:error, msg} -> IO.inspect("error: #{msg}")
+      :ok -> IO.puts("rebuilt all")
+      {:error, msg} -> IO.puts("error: #{msg}")
       _ -> "wat: #{result}"
     end
   end
 
   def build_if_target(file) do
-    IO.inspect("build_if_target(#{file})")
-
     unrecorded = ".redo/#{file}.{uptodate,prereqs,prereqsne,prereqs.build,prereqsne.build}"
     |> Path.wildcard()
     |> Enum.empty?()
@@ -25,8 +21,6 @@ defmodule Redo do
   end
 
   def build(file) do
-    IO.inspect("build(#{file})")
-
     ".redo/#{file}.{prereqs.build,prereqsne.build,uptodate,---redoing}"
     |> Path.wildcard()
     |> Enum.each(&File.rm/1)
@@ -42,7 +36,7 @@ defmodule Redo do
 
     if result == 0 do
       File.rename("#{file}---redoing", file)
-      IO.inspect("rebuilt #{file}")
+      IO.puts("rebuilt #{file}")
       update(".redo/#{file}.prereqs")
       update(".redo/#{file}.prereqsne")
       File.touch!(".redo/#{file}.uptodate")
@@ -53,8 +47,6 @@ defmodule Redo do
   end
 
   def buildfile(file) do
-    IO.inspect("buildfile(#{file})")
-
     direct = "#{file}.do"
     default = Regex.replace(~r/.*([.][^.]*)$/, file, "default\\1") <> ".do"
     cond do
@@ -71,8 +63,6 @@ defmodule Redo do
   end
 
   def update(path) do
-    IO.inspect("update(#{path})")
-
     if File.exists?("#{path}.build") do
       File.rename("#{path}.build", "#{path}")
     else 
@@ -81,8 +71,6 @@ defmodule Redo do
   end
 
   def redo_ifchange() do
-    IO.inspect("redo_ifchange()")
-
     unless System.get_env("REDOPARENT"), do: exit "no parent"
     unless File.exists?(".redo"), do: File.mkdir(".redo")
 
@@ -91,14 +79,11 @@ defmodule Redo do
   end
 
   def redo_ifchange(buildfile, redoparent) do
-    IO.inspect("redo_ifchange(#{buildfile}, #{redoparent})")
-
     if changed(buildfile) do
       if build_if_target(buildfile) do
         record_prereq(buildfile, redoparent, :stats)
       else
         record_prereq(buildfile, redoparent, :failed)
-        exit "failed to rebuild"
       end
     else 
       record_prereq(buildfile, redoparent, :stats)
@@ -106,8 +91,6 @@ defmodule Redo do
   end
 
   def record_prereq(file, redoparent, :stats) do 
-    IO.inspect("record_prereq(#{file}, #{redoparent}, :stats)")
-
     md5 = :crypto.hash(:md5, file) |> Base.encode16 |> String.downcase
     parent_file = ".redo/#{redoparent}.prereqs.build"
     stats = case File.stat(file, time: :posix) do
@@ -121,25 +104,20 @@ defmodule Redo do
   end
 
   def record_prereq(file, redoparent, :failed) do
-    IO.inspect("record_prereq(#{file}, #{redoparent}, :failed)")
-
     parent_file = ".redo/#{redoparent}.prereqs.build"
     stats = %{file: file, mtime: "nowhen", md5: "failed"}
 
     File.write("#{parent_file}---new", stats)
     File.rename("#{parent_file}---new", parent_file)
 
-    exit "failed"
+    IO.puts("failed to rebuild #{file}")
   end
 
   def changed(file) do
-    IO.inspect("changed(#{file})")
     file == file
   end
 
   def redo_ifcreate() do
-    IO.inspect("redo_ifcreate()")
-
     System.argv()
     |> Enum.each(&redo_ifcreate(&1, System.get_env("REDOPARENT")))
   end
