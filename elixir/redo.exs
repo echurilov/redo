@@ -81,8 +81,8 @@ defmodule Redo do
   end
 
   def redo_ifchange(buildfile, redoparent) do
-    status = if changed(buildfile), do: build_if_target(buildfile), else: :ok
-    record_prereq(status, buildfile, redoparent)
+    (if changed(buildfile), do: build_if_target(buildfile), else: :ok)
+    |> record_prereq(buildfile, redoparent)
   end
 
   def record_prereq(:ok, file, redoparent) do 
