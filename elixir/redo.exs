@@ -21,42 +21,28 @@ defmodule Redo do
   end
 
   def build(file) do
-    ".redo/#{file}.{prereqs,prereqsne}.build"
+    ".redo/#{file}.{prereqs.build,prereqsne.build,uptodate,---redoing}"
     |> Path.wildcard()
     |> Enum.each(&File.rm/1)
-
-    ".redo/#{file}{.uptodate,---redoing}"
-    |> Path.wildcard()
-    |> Enum.each(&File.rm/1)
-
-    placeholder = "#{file}---redoing"
 
     {_, result} = System.cmd(
       "sh" [
         "./#{buildfile(file)}",
         file,
         Regex.replace(~r/\..*$/, file, ""),
-        placeholder
-      ], into: File.stream!(placeholder)
+        "#{file}---redoing"
+      ], into: File.stream!("#{file}---redoing")
     )
 
     if result == 0 do
-      File.rename(placeholder, file)
+      File.rename("#{file}---redoing", file)
       IO.puts("rebuilt #{file}")
-      set_prereqs(".redo/#{file}.prereqs")
-      set_prereqs(".redo/#{file}.prereqsne")
+      update(".redo/#{file}.prereqs")
+      update(".redo/#{file}.prereqsne")
       File.touch!(".redo/#{file}.uptodate")
     else
-      File.rm(placeholder)
+      File.rm("#{file}---redoing")
        exit "failed to rebuild #{file}"
-    end
-  end
-
-  def set_prereqs(path) do
-    if File.exists?("#{path}.build") do
-      File.rename("#{path}.build", "#{path}")
-    else 
-      File.rm("#{path}")
     end
   end
 
@@ -74,6 +60,14 @@ defmodule Redo do
         true ->
           exit "cannot build #{file}: no build script (#{default}) found"
       end
+  end
+
+  def update(path) do
+    if File.exists?("#{path}.build") do
+      File.rename("#{path}.build", "#{path}")
+    else 
+      File.rm("#{path}")
+    end
   end
 
   def redo_ifchange() do
