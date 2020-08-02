@@ -25,10 +25,45 @@ defmodule Redo do
     |> Path.wildcard()
     |> Enum.each(&File.rm/1)
 
+    ".redo/#{file}{.uptodate,---redoing}"
+    |> Path.wildcard()
+    |> Enum.each(&File.rm/1)
+
+    placeholder = "#{file}---redoing"
+
+    {_, result} = System.cmd(
+      "sh" [
+        "./#{buildfile(file)}",
+        file,
+        Regex.replace(~r/\..*$/, file, ""),
+        placeholder
+      ], into: File.stream!(placeholder)
+    )
+
+    if result == 0 do
+      File.rename(placeholder, file)
+      IO.puts("rebuilt #{file}")
+      set_prereqs(".redo/#{file}.prereqs")
+      set_prereqs(".redo/#{file}.prereqsne")
+      File.touch!(".redo/#{file}.uptodate")
+    else
+      File.rm(placeholder)
+       exit "failed to rebuild #{file}"
+    end
+  end
+
+  def set_prereqs(path) do
+    if File.exists?("#{path}.build") do
+      File.rename("#{path}.build", "#{path}")
+    else 
+      File.rm("#{path}")
+    end
+  end
+
+  def buildfile(file) do
     direct = "#{file}.do"
     default = Regex.replace(~r/.*([.][^.]*)$/, file, "default\\1") <> ".do"
-	  basefile = Regex.replace(~r/\..*$/, file, "")
-    buildfile = cond do
+    cond do
         File.exists?(direct) -> 
           redo_ifchange(direct, file)
           direct
@@ -39,33 +74,6 @@ defmodule Redo do
         true ->
           exit "cannot build #{file}: no build script (#{default}) found"
       end
-
-    ".redo/#{file}{.uptodate,---redoing}"
-    |> Path.wildcard()
-    |> Enum.each(&File.rm/1)
-
-    {_, result} = "sh"
-    |> System.cmd(["./#{buildfile}", file, basefile, "#{file}---redoing"],
-      into: File.stream!("#{file}---redoing"))
-
-    if result == 0 do
-      File.rename("#{file}---redoing", file)
-      IO.puts("rebuilt #{file}")
-      if File.exists?(".redo/#{file}.prereqs.build") do
-        File.rename(".redo/#{file}.prereqs.build", ".redo/#{file}.prereqs")
-      else 
-        File.rm(".redo/#{file}.prereqs")
-      end
-      if File.exists?(".redo/#{file}.prereqsne.build") do
-        File.rename(".redo/#{file}.prereqsne.build", ".redo/#{file}.prereqsne")
-      else 
-        File.rm(".redo/#{file}.prereqsne")
-      end
-    File.touch!(".redo/#{file}.uptodate")
-    else
-      File.rm("#{file}---redoing")
-       exit "failed to rebuild #{file}"
-    end
   end
 
   def redo_ifchange() do
