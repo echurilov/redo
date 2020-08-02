@@ -34,6 +34,8 @@ defmodule Redo do
       ], into: File.stream!("#{file}---redoing")
     )
 
+    System.put_env("REDOPARENT", file)
+
     if result == 0 do
       File.rename("#{file}---redoing", file)
       IO.puts("rebuilt #{file}")
@@ -84,6 +86,7 @@ defmodule Redo do
         record_prereq(buildfile, redoparent, :stats)
       else
         record_prereq(buildfile, redoparent, :failed)
+        exit "cannot build #{buildfile} with parent #{redoparent}"
       end
     else 
       record_prereq(buildfile, redoparent, :stats)
