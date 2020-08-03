@@ -80,9 +80,9 @@ defmodule Redo do
     |> Enum.each(&redo_ifchange(&1, System.get_env("REDOPARENT")))
   end
 
-  def redo_ifchange(buildfile, redoparent) do
-    (if changed(redoparent), do: build_if_target(buildfile), else: :ok)
-    |> record_prereq(buildfile, redoparent)
+  def redo_ifchange(file, redoparent) do
+    (if changed(file), do: build_if_target(file), else: :ok)
+    |> record_prereq(file, redoparent)
   end
 
   def record_prereq(:ok, file, redoparent) do 
@@ -99,7 +99,7 @@ defmodule Redo do
 
   def record_prereq(nil, file, redoparent) do
     parent_file = ".redo/#{redoparent}.prereqs.build"
-    stats = %{file: file, mtime: "nowhen", md5: "failed"}
+    stats = "#{file} nowhen failed"
 
     File.write("#{parent_file}---new", stats)
     File.rename("#{parent_file}---new", parent_file)
@@ -107,27 +107,38 @@ defmodule Redo do
     exit "cannot build #{file} with parent #{redoparent}"
   end
 
-  def changed(redoparent) do
-    stats = %{file: nil, mtime: nil, md5: nil}
-    if File.exists?(".redo/#{redoparent}.prereqs") do
-      {:ok, contents} = File.read(".redo/#{redoparent}.prereqs")
-      [file, mtime, md5] = String.split(contents)
-      %{stats | file: file, mtime: mtime, md5: md5}
+  def changed(file) do
+    deleted = not File.exists?(file)
+
+    prereqs_outdated = case File.read(".redo/#{file}.prereqs") do
+      {:error, _} -> false
+      {:ok, contents} ->
+      contents
+      |> String.split("/n")
+      |> Enum.any?(fn entry ->
+        [prereq, mtime, md5] = String.split(entry)
+        if changed(prereq), do: build_if_target(prereq)
+        case File.stat(prereq, time: :posix) do
+          {:error, _} -> true
+          {:ok, %File.Stat{mtime: ^mtime}} -> md5 == md5(prereq)
+          {:ok, _} -> false
+        end
+      end)
     end
 
-    if stats.file != nil do
-      if changed(stats.file) do
-        IO.puts("#{redoparent}: #{stats.file} has changed")
-        build_if_target(stats.file)
-      end
+    prereqsne_created = case File.read(".redo/#{file}.prereqsne") do
+      {:error, _} -> false
+      {:ok, contents} ->
+      contents
+      |> String.split("/n")
+      |> Enum.any?(&File.exists?/1)
     end
 
-    # cond do
-    #   stats.file == nil -> true
-    #   File.stat(stats.file, time: :posix).mtime == stats.mtime and stats.md5 == md5(redoparent) -> true
-    #   File.exists?(".redo/#{redoparent}.prereqsne") -> true
-    #   true -> false
-    # end
+    deleted or prereqs_outdated or prereqsne_created
+  end
+
+  def md5(string) do
+    :crypto.hash(:md5, string) |> Base.encode16 |> String.downcase
   end
 
   def redo_ifcreate() do
@@ -135,11 +146,8 @@ defmodule Redo do
     |> Enum.each(&redo_ifcreate(&1, System.get_env("REDOPARENT")))
   end
 
-  def redo_ifcreate(buildfile, redoparent) do
-    IO.inspect("redo_ifcreate(#{buildfile}, #{redoparent})")
+  def redo_ifcreate(file, redoparent) do
+    IO.inspect("redo_ifcreate(#{file}, #{redoparent})")
   end
 
-  def md5(string) do
-    :crypto.hash(:md5, string) |> Base.encode16 |> String.downcase
-  end
 end
