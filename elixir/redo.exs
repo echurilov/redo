@@ -142,12 +142,18 @@ defmodule Redo do
   end
 
   def redo_ifcreate() do
+    unless System.get_env("REDOPARENT"), do: exit "no parent"
+
     System.argv()
     |> Enum.each(&redo_ifcreate(&1, System.get_env("REDOPARENT")))
   end
 
   def redo_ifcreate(file, redoparent) do
-    IO.inspect("redo_ifcreate(#{file}, #{redoparent})")
-  end
+    unless File.exists?(".redo/#{Path.dirname(file)}"), do: File.mkdir(".redo/#{Path.dirname(file)}")
+    if File.exists?(file), do: exit "#{file} exists"
 
+    parent_file = ".redo/#{redoparent}.prereqsne.build"
+    File.write("#{parent_file}---new", file)
+    File.rename("#{parent_file}---new", parent_file)
+  end
 end
