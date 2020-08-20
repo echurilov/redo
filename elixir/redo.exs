@@ -6,9 +6,9 @@ defmodule Redo do
     |> Enum.each(&build_if_target/1)
 
     case result do
-      :ok -> IO.puts("rebuilt all")
-      {:error, msg} -> IO.puts("error: #{msg}")
-      _ -> "wat: #{result}"
+      :ok -> IO.puts(:stderr, "rebuilt all")
+      {:error, msg} -> exit "error: #{msg}"
+      _ -> exit "wat: #{result}"
     end
   end
 
@@ -17,29 +17,34 @@ defmodule Redo do
     |> Path.wildcard()
     |> Enum.empty?()
 
+    IO.puts(:stderr, "#{System.get_env("REDOLEVEL", "redo")} #{file}")
+
     unless File.exists?(file) and unrecorded, do: build(file)
   end
 
   def build(file) do
-    IO.puts("building #{file}")
+    redolevel = System.get_env("REDOLEVEL", "redo") <> "  "
+
+    System.put_env("REDOLEVEL", redolevel)
 
     ".redo/#{file}.{prereqs.build,prereqsne.build,uptodate}"
     |> Path.wildcard()
     |> Enum.each(&File.rm/1)
 
     {_, code} = System.cmd(
-      "sh", [
+      "sh",
+      [
         "./#{buildfile(file)}",
         file,
         Regex.replace(~r/\..*$/, file, ""),
         "#{file}---redoing"
-      ], into: File.stream!("#{file}---redoing"),
+      ],
+      into: File.stream!("#{file}---redoing"),
       env: [{"REDOPARENT", file}]
     )
 
     if code == 0 do
       File.rename("#{file}---redoing", file)
-      IO.puts("rebuilt #{file}")
       update(".redo/#{file}.prereqs")
       update(".redo/#{file}.prereqsne")
       File.touch!(".redo/#{file}.uptodate")

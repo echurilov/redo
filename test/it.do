@@ -1,4 +1,4 @@
 #!
 
-redo-ifchange a.part b.part
-cat a.part b.part
+redo-ifchange first.part second.part
+cat first.part second.part

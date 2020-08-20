@@ -1,3 +1,3 @@
 #!
 
-echo "part $2"
+echo "$2 part"
