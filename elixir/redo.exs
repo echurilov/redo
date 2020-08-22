@@ -1,6 +1,9 @@
 defmodule Redo do
   def redo() do 
     unless File.exists?(".redo"), do: File.mkdir(".redo")
+
+    redolevel = System.get_env("REDOLEVEL", "redo")
+    System.put_env("REDOLEVEL", redolevel)
     
     result = System.argv()
     |> Enum.each(&build_if_target/1)
@@ -17,15 +20,14 @@ defmodule Redo do
     |> Path.wildcard()
     |> Enum.empty?()
 
-    IO.puts(:stderr, "#{System.get_env("REDOLEVEL", "redo")} #{file}")
+    redolevel = System.get_env("REDOLEVEL", "redo")
+    IO.puts(:stderr, "#{redolevel}  #{file}")
 
     unless File.exists?(file) and unrecorded, do: build(file)
   end
 
   def build(file) do
-    redolevel = System.get_env("REDOLEVEL", "redo") <> "  "
-
-    System.put_env("REDOLEVEL", redolevel)
+    if File.exists?("#{file}---redoing"), do: exit "already building #{file}"
 
     ".redo/#{file}.{prereqs.build,prereqsne.build,uptodate}"
     |> Path.wildcard()
@@ -80,6 +82,9 @@ defmodule Redo do
   def redo_ifchange() do
     unless System.get_env("REDOPARENT"), do: exit "no parent"
     unless File.exists?(".redo"), do: File.mkdir(".redo")
+
+    redolevel = System.get_env("REDOLEVEL", "redo") <> "  "
+    System.put_env("REDOLEVEL", redolevel)
 
     System.argv()
     |> Enum.each(&redo_ifchange(&1, System.get_env("REDOPARENT")))
